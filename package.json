@@ -5,7 +5,6 @@
   "description": "校园二手交易平台数据库系统大作业静态网站",
   "scripts": {
     "dev": "node server.mjs",
-    "start": "node server.mjs",
     "build": "node -e \"console.log('Static site: public directory is ready for Vercel.')\""
   },
   "keywords": [
