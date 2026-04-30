@@ -1,0 +1,5 @@
+node_modules/
+.vercel/
+dist/
+_pdf_pages/
+.DS_Store

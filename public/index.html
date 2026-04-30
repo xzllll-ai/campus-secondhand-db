@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>校园二手交易平台数据库系统</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <nav class="nav">
+        <a href="#home">首页</a>
+        <a href="#items">商品列表</a>
+        <a href="#users">用户列表</a>
+        <a href="#orders">订单列表</a>
+        <a href="#queries">查询展示</a>
+        <a href="#admin">数据操作</a>
+      </nav>
+      <section id="home" class="hero-grid">
+        <div>
+          <p class="eyebrow">Database Course Project</p>
+          <h1>校园二手交易平台数据库系统</h1>
+          <p class="lead">
+            使用三张核心表 User、Item、Orders 展示校园二手交易数据，
+            并实现基础查询、连接查询、聚合分组、视图、购买事务和安全/并发说明。
+          </p>
+          <div class="hero-actions">
+            <button data-scroll="#items">查看商品</button>
+            <button class="secondary" data-scroll="#queries">运行查询</button>
+          </div>
+        </div>
+        <aside class="schema-card">
+          <h2>数据库结构</h2>
+          <ul>
+            <li><strong>User</strong>: user_id, user_name, phone</li>
+            <li><strong>Item</strong>: item_id, item_name, category, price, status, seller_id</li>
+            <li><strong>Orders</strong>: order_id, item_id, buyer_id, order_date</li>
+          </ul>
+          <p>约束：商品最多交易一次；订单 item_id 唯一；已下单商品 status 必须为 1。</p>
+        </aside>
+      </section>
+    </header>
+
+    <main>
+      <section class="section stats-strip" id="stats"></section>
+
+      <section class="section" id="items">
+        <div class="section-title">
+          <p class="eyebrow">Item Table</p>
+          <h2>商品列表页面</h2>
+        </div>
+        <div id="itemsTable" class="table-wrap"></div>
+      </section>
+
+      <section class="section two-col">
+        <div id="users">
+          <div class="section-title">
+            <p class="eyebrow">User Table</p>
+            <h2>用户列表页面</h2>
+          </div>
+          <div id="usersTable" class="table-wrap"></div>
+        </div>
+        <div id="orders">
+          <div class="section-title">
+            <p class="eyebrow">Orders Table</p>
+            <h2>订单列表页面</h2>
+          </div>
+          <div id="ordersTable" class="table-wrap"></div>
+        </div>
+      </section>
+
+      <section class="section" id="queries">
+        <div class="section-title">
+          <p class="eyebrow">SQL Queries</p>
+          <h2>基本查询与连接查询</h2>
+          <p>点击按钮运行作业要求中的查询，结果会显示在下方表格。</p>
+        </div>
+        <div class="query-panel" id="queryButtons"></div>
+        <article class="result-card">
+          <div>
+            <p class="eyebrow">当前查询</p>
+            <h3 id="queryTitle">请选择一个查询</h3>
+          </div>
+          <pre id="querySql" class="sql-box">-- SQL 将显示在这里</pre>
+          <div id="queryResult" class="table-wrap"></div>
+        </article>
+      </section>
+
+      <section class="section two-col">
+        <div>
+          <div class="section-title">
+            <p class="eyebrow">Aggregation</p>
+            <h2>聚合与分组</h2>
+          </div>
+          <div id="aggregateCards" class="cards"></div>
+        </div>
+        <div>
+          <div class="section-title">
+            <p class="eyebrow">Views</p>
+            <h2>数据库视图</h2>
+          </div>
+          <div class="tabs">
+            <button class="active" data-view="sold">已售商品视图</button>
+            <button data-view="unsold">未售商品视图</button>
+          </div>
+          <pre class="sql-box" id="viewSql"></pre>
+          <div id="viewTable" class="table-wrap"></div>
+        </div>
+      </section>
+
+      <section class="section" id="admin">
+        <div class="section-title">
+          <p class="eyebrow">Data Operations</p>
+          <h2>数据操作与购买业务逻辑</h2>
+          <p>这些操作会真实修改当前网站保存的数据；刷新页面后可以看到变化。</p>
+        </div>
+        <div class="admin-grid">
+          <form id="addItemForm" class="form-card">
+            <h3>插入一个新商品</h3>
+            <label>商品编号 <input name="item_id" value="i006" required /></label>
+            <label>商品名 <input name="item_name" value="Notebook" required /></label>
+            <label>类别 <input name="category" value="Book" required /></label>
+            <label>价格 <input name="price" type="number" min="1" value="28" required /></label>
+            <label>卖家ID <input name="seller_id" value="u003" required /></label>
+            <button type="submit">插入商品</button>
+          </form>
+          <form id="updatePriceForm" class="form-card">
+            <h3>修改某商品价格</h3>
+            <label>商品编号 <input name="item_id" value="i003" required /></label>
+            <label>新价格 <input name="price" type="number" min="1" value="75" required /></label>
+            <button type="submit">修改价格</button>
+          </form>
+          <form id="deleteItemForm" class="form-card">
+            <h3>删除一个未售出的商品</h3>
+            <label>商品编号 <input name="item_id" value="i005" required /></label>
+            <button type="submit" class="danger">删除未售商品</button>
+          </form>
+          <form id="buyItemForm" class="form-card">
+            <h3>购买商品事务</h3>
+            <label>订单编号 <input name="order_id" value="o003" required /></label>
+            <label>商品编号 <input name="item_id" value="i001" required /></label>
+            <label>买家ID <input name="buyer_id" value="u002" required /></label>
+            <label>日期 <input name="order_date" type="date" value="2024-05-08" required /></label>
+            <button type="submit">购买商品</button>
+          </form>
+        </div>
+        <div class="notice" id="operationMessage">等待操作。</div>
+        <button class="secondary reset" id="resetData">恢复初始数据</button>
+      </section>
+
+      <section class="section notes">
+        <div>
+          <p class="eyebrow">Security</p>
+          <h2>安全性说明</h2>
+          <p>普通用户只开放 SELECT 查询权限，不开放 DELETE、UPDATE 等写权限；后台管理操作应由管理员账号执行，并通过登录鉴权、角色权限和参数化 SQL 防止越权与注入。</p>
+        </div>
+        <div>
+          <p class="eyebrow">Concurrency & Recovery</p>
+          <h2>并发与恢复说明</h2>
+          <p>两个用户同时购买同一商品可能产生重复订单。解决方式是在事务中锁定商品行，并为 orders.item_id 设置 UNIQUE 约束；系统崩溃后可通过事务日志、备份和订单表重放恢复数据。</p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>校园二手交易平台数据库系统 | GitHub + Vercel 静态部署</p>
+    </footer>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
