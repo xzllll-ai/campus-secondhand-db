@@ -4,6 +4,8 @@
 
 **https://campus-secondhand-db.vercel.app**
 
+GitHub 仓库：**https://github.com/xzllll-ai/campus-secondhand-db**
+
 ---
 
 ## 一、从运行代码到获得最终网址的具体步骤
