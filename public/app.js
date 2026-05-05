@@ -83,10 +83,21 @@ const queryDefinitions = [
 
 let db = loadDb();
 
+const history = [];
+const chartLines = [
+  { key: "items", label: "商品总数", color: "#235f46" },
+  { key: "sold", label: "已售商品", color: "#c96d4d" },
+  { key: "unsold", label: "未售商品", color: "#a5c96f" },
+  { key: "orders", label: "订单总数", color: "#f4b446" }
+];
+
 document.addEventListener("DOMContentLoaded", () => {
   bindScrollButtons();
   bindForms();
   bindViews();
+  bindFilters();
+  bindExport();
+  bindTableInteractions();
   renderAll();
   renderQueryButtons();
 });
@@ -122,7 +133,10 @@ function renderAll() {
   renderStats();
   renderTables();
   renderAggregates();
+  renderPieChart();
+  renderChart();
   renderView("sold");
+  updateCategoryOptions();
 }
 
 function renderStats() {
@@ -143,9 +157,17 @@ function statCard(label, value) {
 }
 
 function renderTables() {
-  document.querySelector("#itemsTable").innerHTML = table(db.items.map(formatItem));
-  document.querySelector("#usersTable").innerHTML = table(db.users);
-  document.querySelector("#ordersTable").innerHTML = table(db.orders);
+  let filtered = getFilteredItems();
+  let users = db.users;
+  let orders = db.orders;
+
+  if (sortState.items) filtered = sortRows(filtered, sortState.items.col, sortState.items.dir);
+  if (sortState.users) users = sortRows(users, sortState.users.col, sortState.users.dir);
+  if (sortState.orders) orders = sortRows(orders, sortState.orders.col, sortState.orders.dir);
+
+  document.querySelector("#itemsTable").innerHTML = table(filtered.map(formatItem), "items");
+  document.querySelector("#usersTable").innerHTML = table(users, "users");
+  document.querySelector("#ordersTable").innerHTML = table(orders, "orders");
 }
 
 function formatItem(item) {
@@ -157,17 +179,41 @@ function formatItem(item) {
   };
 }
 
-function table(rows) {
+const sortState = {};
+
+function table(rows, tableId) {
   if (!rows.length) return `<div class="empty-result"><p>没有查询到数据。</p></div>`;
 
   const columns = Object.keys(rows[0]);
-  const head = columns.map((column) => `<th>${column}</th>`).join("");
+  const currentSort = tableId ? sortState[tableId] : null;
+
+  const head = columns.map((column) => {
+    let cls = "";
+    if (currentSort && currentSort.col === column) {
+      cls = currentSort.dir === "asc" ? " sort-asc" : " sort-desc";
+    }
+    const arrow = '<span class="sort-arrow"></span>';
+    const attr = tableId ? ` data-table="${tableId}" data-col="${column}"` : "";
+    return `<th class="${cls.trim()}"${attr}>${column}${arrow}</th>`;
+  }).join("");
+
   const body = rows.map((row) => {
     const cells = columns.map((column) => `<td>${row[column]}</td>`).join("");
-    return `<tr>${cells}</tr>`;
+    return `<tr class="clickable">${cells}</tr>`;
   }).join("");
 
   return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function sortRows(rows, col, dir) {
+  return [...rows].sort((a, b) => {
+    const va = a[col];
+    const vb = b[col];
+    const na = Number(va);
+    const nb = Number(vb);
+    if (!isNaN(na) && !isNaN(nb)) return dir === "asc" ? na - nb : nb - na;
+    return dir === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
 }
 
 function renderQueryButtons() {
@@ -188,9 +234,9 @@ function renderQueryButtons() {
 function renderQuery(query) {
   document.querySelector("#queryTitle").textContent = query.title;
   document.querySelector("#queryResult").classList.remove("empty-result");
-  document.querySelector("#queryResult").innerHTML = table(query.run(db).map((row) => (
-    row.status !== undefined ? formatItem(row) : row
-  )));
+  let rows = query.run(db).map((row) => row.status !== undefined ? formatItem(row) : row);
+  if (sortState.query) rows = sortRows(rows, sortState.query.col, sortState.query.dir);
+  document.querySelector("#queryResult").innerHTML = table(rows, "query");
 }
 
 function renderAggregates() {
@@ -249,15 +295,18 @@ function bindViews() {
 
 function renderView(type) {
   if (type === "sold") {
-    const rows = db.orders.map((order) => ({
+    let rows = db.orders.map((order) => ({
       item_name: findItem(db, order.item_id)?.item_name || "",
       buyer_id: order.buyer_id
     }));
-    document.querySelector("#viewTable").innerHTML = table(rows);
+    if (sortState.sold) rows = sortRows(rows, sortState.sold.col, sortState.sold.dir);
+    document.querySelector("#viewTable").innerHTML = table(rows, "sold");
     return;
   }
 
-  document.querySelector("#viewTable").innerHTML = table(db.items.filter((item) => item.status === 0).map(formatItem));
+  let rows = db.items.filter((item) => item.status === 0);
+  if (sortState.unsold) rows = sortRows(rows, sortState.unsold.col, sortState.unsold.dir);
+  document.querySelector("#viewTable").innerHTML = table(rows.map(formatItem), "unsold");
 }
 
 function bindForms() {
@@ -275,7 +324,7 @@ function bindForms() {
       status: 0,
       seller_id: data.seller_id
     });
-    saveAndRefresh(`已插入商品 ${data.item_id}。`);
+    saveAndRefresh(`已插入商品 ${data.item_id}。`, `插入${data.item_id}`);
   });
 
   document.querySelector("#updatePriceForm").addEventListener("submit", (event) => {
@@ -284,10 +333,10 @@ function bindForms() {
     const item = findItem(db, data.item_id);
     if (!item) return message(`修改失败：商品 ${data.item_id} 不存在。`, true);
     item.price = Number(data.price);
-    saveAndRefresh(`已将商品 ${data.item_id} 的价格修改为 ${data.price}。`);
+    saveAndRefresh(`已将商品 ${data.item_id} 的价格修改为 ${data.price}。`, `改价${data.item_id}`);
   });
 
-  document.querySelector("#deleteItemForm").addEventListener("submit", (event) => {
+  document.querySelector("#deleteItemForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = formData(event.target);
     const item = findItem(db, data.item_id);
@@ -295,19 +344,27 @@ function bindForms() {
     if (item.status !== 0 || db.orders.some((order) => order.item_id === data.item_id)) {
       return message("删除失败：只能删除未售出的商品。", true);
     }
+    const ok = await showConfirm("删除商品", `确定要删除商品「${item.item_name}」（${data.item_id}）吗？此操作不可撤销。`);
+    if (!ok) return;
     db.items = db.items.filter((record) => record.item_id !== data.item_id);
-    saveAndRefresh(`已删除未售商品 ${data.item_id}。`);
+    saveAndRefresh(`已删除未售商品 ${data.item_id}。`, `删除${data.item_id}`);
   });
 
-  document.querySelector("#buyItemForm").addEventListener("submit", (event) => {
+  document.querySelector("#buyItemForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = formData(event.target);
+    const item = findItem(db, data.item_id);
+    const buyer = findUser(db, data.buyer_id);
+    if (item && buyer) {
+      const ok = await showConfirm("确认购买", `确定要让「${buyer.user_name}」购买商品「${item.item_name}」吗？`);
+      if (!ok) return;
+    }
     buyItem(data);
   });
 
   document.querySelector("#resetData").addEventListener("click", () => {
     db = clone(initialData);
-    saveAndRefresh("已恢复 PDF 中给定的初始数据。");
+    saveAndRefresh("已恢复初始数据。", "重置数据");
   });
 }
 
@@ -336,10 +393,11 @@ function buyItem(data) {
     order_date: data.order_date
   });
   item.status = 1;
-  saveAndRefresh(`购买成功：新增订单 ${data.order_id}，商品 ${data.item_id} 已更新为已售出。`);
+  saveAndRefresh(`购买成功：新增订单 ${data.order_id}，商品 ${data.item_id} 已更新为已售出。`, `购买${data.item_id}`);
 }
 
-function saveAndRefresh(text) {
+function saveAndRefresh(text, snapLabel) {
+  recordSnapshot(snapLabel || text.replace(/[：。].*/g, "").slice(0, 8));
   saveDb();
   renderAll();
   message(text);
@@ -349,6 +407,7 @@ function message(text, isError = false) {
   const element = document.querySelector("#operationMessage");
   element.textContent = text;
   element.style.color = isError ? "var(--clay)" : "var(--green-dark)";
+  showToast(text, isError ? "error" : "success");
 }
 
 function bindScrollButtons() {
@@ -356,3 +415,281 @@ function bindScrollButtons() {
     button.addEventListener("click", () => document.querySelector(button.dataset.scroll).scrollIntoView());
   });
 }
+
+function showToast(text, type = "success") {
+  const container = document.querySelector("#toastContainer");
+  const icon = type === "success"
+    ? '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
+    : '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>';
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `${icon}<span>${text}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add("leaving");
+    toast.addEventListener("animationend", () => toast.remove());
+  }, 3000);
+}
+
+function showConfirm(title, message) {
+  return new Promise((resolve) => {
+    const modal = document.querySelector("#confirmModal");
+    document.querySelector("#confirmTitle").textContent = title;
+    document.querySelector("#confirmMessage").textContent = message;
+    modal.classList.add("visible");
+
+    function cleanup(result) {
+      modal.classList.remove("visible");
+      document.querySelector("#confirmOk").removeEventListener("click", onOk);
+      document.querySelector("#confirmCancel").removeEventListener("click", onCancel);
+      modal.removeEventListener("click", onBackdrop);
+      resolve(result);
+    }
+    function onOk() { cleanup(true); }
+    function onCancel() { cleanup(false); }
+    function onBackdrop(e) { if (e.target === modal) cleanup(false); }
+
+    document.querySelector("#confirmOk").addEventListener("click", onOk);
+    document.querySelector("#confirmCancel").addEventListener("click", onCancel);
+    modal.addEventListener("click", onBackdrop);
+  });
+}
+
+function getFilteredItems() {
+  const search = (document.querySelector("#searchInput").value || "").toLowerCase().trim();
+  const category = document.querySelector("#categoryFilter").value;
+  const status = document.querySelector("#statusFilter").value;
+  return db.items.filter((item) => {
+    if (search && !item.item_name.toLowerCase().includes(search)) return false;
+    if (category && item.category !== category) return false;
+    if (status !== "" && String(item.status) !== status) return false;
+    return true;
+  });
+}
+
+function bindFilters() {
+  document.querySelector("#searchInput").addEventListener("input", renderTables);
+  document.querySelector("#categoryFilter").addEventListener("change", renderTables);
+  document.querySelector("#statusFilter").addEventListener("change", renderTables);
+}
+
+function updateCategoryOptions() {
+  const select = document.querySelector("#categoryFilter");
+  const current = select.value;
+  const categories = [...new Set(db.items.map((item) => item.category))];
+  select.innerHTML = '<option value="">全部类别</option>' +
+    categories.map((c) => `<option value="${c}" ${c === current ? "selected" : ""}>${c}</option>`).join("");
+}
+
+function renderPieChart() {
+  const categoryCounts = db.items.reduce((result, item) => {
+    result[item.category] = (result[item.category] || 0) + 1;
+    return result;
+  }, {});
+  const entries = Object.entries(categoryCounts);
+  const total = db.items.length;
+  if (!total) {
+    document.querySelector("#pieChart").style.background = "var(--sage)";
+    document.querySelector("#pieLegend").innerHTML = "";
+    return;
+  }
+
+  const colors = ["#235f46", "#a5c96f", "#f4b446", "#c96d4d", "#6b8f71", "#dce8d7", "#8b6a25"];
+  let acc = 0;
+  const stops = entries.map(([cat, count], i) => {
+    const start = acc;
+    acc += (count / total) * 100;
+    return `${colors[i % colors.length]} ${start}% ${acc}%`;
+  });
+  document.querySelector("#pieChart").style.background = `conic-gradient(${stops.join(", ")})`;
+
+  document.querySelector("#pieLegend").innerHTML = entries.map(([cat, count], i) => `
+    <div class="pie-legend-item">
+      <span class="pie-legend-dot" style="background:${colors[i % colors.length]}"></span>
+      <span>${cat}</span>
+      <span class="pie-legend-count">${count}</span>
+    </div>
+  `).join("");
+}
+
+function bindExport() {
+  document.querySelector("#exportData").addEventListener("click", exportData);
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "campus-secondhand-data.json";
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast("数据已导出为 JSON 文件。", "success");
+}
+
+function bindTableInteractions() {
+  document.addEventListener("click", (event) => {
+    const th = event.target.closest("th[data-table]");
+    if (th) {
+      const tableId = th.dataset.table;
+      const col = th.dataset.col;
+      if (sortState[tableId] && sortState[tableId].col === col) {
+        sortState[tableId].dir = sortState[tableId].dir === "asc" ? "desc" : "asc";
+      } else {
+        sortState[tableId] = { col, dir: "asc" };
+      }
+      renderAll();
+      return;
+    }
+
+    const tr = event.target.closest("tr.clickable");
+    if (tr && !event.target.closest("th")) {
+      const tableEl = tr.closest("table");
+      if (!tableEl) return;
+      const headers = [...tableEl.querySelectorAll("thead th")].map((th) => th.textContent.replace(/[▲▼]/g, "").trim());
+      const cells = [...tr.querySelectorAll("td")];
+      const data = {};
+      cells.forEach((td, i) => { if (headers[i]) data[headers[i]] = td.textContent.trim(); });
+      showDetailModal(data);
+    }
+  });
+
+  document.querySelector("#detailClose").addEventListener("click", closeDetailModal);
+  document.querySelector("#detailModal").addEventListener("click", (event) => {
+    if (event.target === document.querySelector("#detailModal")) closeDetailModal();
+  });
+}
+
+function showDetailModal(data) {
+  const body = document.querySelector("#detailBody");
+  const labelMap = {
+    item_id: "商品编号", item_name: "商品名称", category: "类别", price: "价格",
+    status: "状态", seller_id: "卖家编号", user_id: "用户编号", user_name: "用户名",
+    phone: "电话", order_id: "订单编号", buyer_id: "买家编号", order_date: "订单日期",
+    purchase_status: "购买状态"
+  };
+  body.innerHTML = Object.entries(data).map(([key, value]) => {
+    const label = labelMap[key] || key;
+    let display = value;
+    if (key === "status") display = value === "0" || value.includes("0") ? "未售出" : "已售出";
+    return `<div class="detail-row"><span>${label}</span><span>${display}</span></div>`;
+  }).join("");
+  document.querySelector("#detailTitle").textContent = data.item_name || data.user_name || data.order_id || "详细信息";
+  document.querySelector("#detailModal").classList.add("visible");
+}
+
+function closeDetailModal() {
+  document.querySelector("#detailModal").classList.remove("visible");
+}
+
+function snapshot(label) {
+  return {
+    label,
+    time: history.length,
+    items: db.items.length,
+    sold: db.items.filter((i) => i.status === 1).length,
+    unsold: db.items.filter((i) => i.status === 0).length,
+    orders: db.orders.length
+  };
+}
+
+function recordSnapshot(label) {
+  history.push(snapshot(label));
+  if (history.length > 30) history.shift();
+}
+
+function getChartPoints(key, maxVal, chartW, chartH, padX, padY) {
+  const data = history.map((h) => h[key]);
+  if (data.length < 2) return { points: "", dots: [] };
+  const max = Math.max(maxVal, 1);
+  const stepX = (chartW - padX * 2) / (data.length - 1);
+  const dots = data.map((v, i) => ({
+    x: padX + i * stepX,
+    y: chartH - padY - (v / max) * (chartH - padY * 2),
+    val: v,
+    idx: i
+  }));
+  return { points: dots.map((d) => `${d.x},${d.y}`).join(" "), dots };
+}
+
+function renderChart() {
+  if (history.length < 2) {
+    document.querySelector("#trendSvg").innerHTML =
+      '<text x="350" y="160" text-anchor="middle" class="chart-label" font-size="14">进行一次操作后将显示趋势图</text>';
+    document.querySelector("#chartLegend").innerHTML = "";
+    document.querySelector("#chartHistory").innerHTML = "";
+    return;
+  }
+
+  const svg = document.querySelector("#trendSvg");
+  const W = 700, H = 320, PX = 50, PY = 30;
+
+  const maxVal = Math.max(...history.map((h) => Math.max(h.items, h.sold, h.unsold, h.orders)), 1);
+  const niceMax = Math.ceil(maxVal / 5) * 5 || 5;
+  const gridSteps = 5;
+
+  let svgContent = "";
+
+  for (let i = 0; i <= gridSteps; i++) {
+    const y = H - PY - (i / gridSteps) * (H - PY * 2);
+    const val = Math.round((i / gridSteps) * niceMax);
+    svgContent += `<line x1="${PX}" y1="${y}" x2="${W - PX}" y2="${y}" class="chart-grid-line"/>`;
+    svgContent += `<text x="${PX - 10}" y="${y + 4}" text-anchor="end" class="chart-label">${val}</text>`;
+  }
+
+  svgContent += `<line x1="${PX}" y1="${H - PY}" x2="${W - PX}" y2="${H - PY}" class="chart-axis"/>`;
+  svgContent += `<line x1="${PX}" y1="${PY}" x2="${PX}" y2="${H - PY}" class="chart-axis"/>`;
+
+  history.forEach((h, i) => {
+    if (history.length <= 10 || i % Math.ceil(history.length / 10) === 0) {
+      const stepX = (W - PX * 2) / (history.length - 1);
+      const x = PX + i * stepX;
+      svgContent += `<text x="${x}" y="${H - 8}" text-anchor="middle" class="chart-label">${h.label}</text>`;
+    }
+  });
+
+  chartLines.forEach((line) => {
+    const { points, dots } = getChartPoints(line.key, niceMax, W, H, PX, PY);
+    if (!points) return;
+    svgContent += `<polyline points="${points}" fill="none" stroke="${line.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+    dots.forEach((d) => {
+      svgContent += `<circle cx="${d.x}" cy="${d.y}" r="4" fill="${line.color}" stroke="#fff" stroke-width="2" class="chart-dot" data-label="${line.label}" data-val="${d.val}" data-step="${history[d.idx]?.label || ""}"/>`;
+    });
+  });
+
+  svg.innerHTML = svgContent;
+
+  document.querySelector("#chartLegend").innerHTML = chartLines.map((l) =>
+    `<div class="chart-legend-item"><span class="chart-legend-line" style="background:${l.color}"></span>${l.label}</div>`
+  ).join("");
+
+  document.querySelector("#chartHistory").innerHTML = history.slice(-8).map((h) =>
+    `<span class="chart-tag"><span class="chart-tag-dot" style="background:var(--green)"></span>${h.label}</span>`
+  ).join("");
+
+  svg.querySelectorAll(".chart-dot").forEach((dot) => {
+    dot.addEventListener("mouseenter", (e) => showChartTooltip(e, dot));
+    dot.addEventListener("mouseleave", hideChartTooltip);
+  });
+}
+
+function showChartTooltip(event, dot) {
+  let tip = document.querySelector(".chart-tooltip");
+  if (!tip) {
+    tip = document.createElement("div");
+    tip.className = "chart-tooltip";
+    document.body.appendChild(tip);
+  }
+  tip.textContent = `${dot.dataset.label}: ${dot.dataset.val}`;
+  tip.classList.add("visible");
+  const rect = dot.getBoundingClientRect();
+  tip.style.left = rect.left + rect.width / 2 - tip.offsetWidth / 2 + "px";
+  tip.style.top = rect.top - tip.offsetHeight - 10 + "px";
+}
+
+function hideChartTooltip() {
+  const tip = document.querySelector(".chart-tooltip");
+  if (tip) tip.classList.remove("visible");
+}
+
+recordSnapshot("初始状态");

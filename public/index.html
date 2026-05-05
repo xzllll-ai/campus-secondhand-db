@@ -9,6 +9,26 @@
   <body>
     <div class="ambient ambient-one"></div>
     <div class="ambient ambient-two"></div>
+    <div id="toastContainer" class="toast-container"></div>
+    <div id="confirmModal" class="modal-overlay">
+      <div class="modal-card">
+        <h3 id="confirmTitle">确认操作</h3>
+        <p id="confirmMessage">确定要执行此操作吗？</p>
+        <div class="modal-actions">
+          <button class="secondary" id="confirmCancel">取消</button>
+          <button class="danger" id="confirmOk">确认</button>
+        </div>
+      </div>
+    </div>
+    <div id="detailModal" class="modal-overlay">
+      <div class="modal-card detail-card">
+        <div class="detail-header">
+          <h3 id="detailTitle">详细信息</h3>
+          <button class="detail-close" id="detailClose">&times;</button>
+        </div>
+        <div id="detailBody" class="detail-body"></div>
+      </div>
+    </div>
 
     <header class="hero" id="home">
       <nav class="nav">
@@ -56,6 +76,20 @@
           <h2>商品列表</h2>
           <p>展示商品编号、名称、类别、价格、售出状态和卖家编号。</p>
         </div>
+        <div class="filter-bar">
+          <div class="filter-input-wrap">
+            <svg class="filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input id="searchInput" type="text" placeholder="搜索商品名称…" />
+          </div>
+          <select id="categoryFilter">
+            <option value="">全部类别</option>
+          </select>
+          <select id="statusFilter">
+            <option value="">全部状态</option>
+            <option value="0">未售出</option>
+            <option value="1">已售出</option>
+          </select>
+        </div>
         <div id="itemsTable" class="table-wrap"></div>
       </section>
 
@@ -80,7 +114,7 @@
         <div class="section-title center-title">
           <p class="eyebrow">Interactive Queries</p>
           <h2>查询结果展示</h2>
-          <p>点击不同任务按钮，页面会直接展示对应查询结果，不显示 SQL 代码。</p>
+          <p>点击不同任务按钮，页面会直接展示对应查询结果。</p>
         </div>
         <div class="query-panel" id="queryButtons"></div>
         <article class="result-card">
@@ -100,6 +134,13 @@
             <p>统计商品总数、分类数量、平均价格和发布商品最多的用户。</p>
           </div>
           <div id="aggregateCards" class="cards"></div>
+          <div class="pie-section">
+            <h3>商品分类占比</h3>
+            <div class="pie-chart-wrap">
+              <div id="pieChart" class="pie-chart"></div>
+              <div id="pieLegend" class="pie-legend"></div>
+            </div>
+          </div>
         </div>
         <div>
           <div class="section-title">
@@ -159,25 +200,31 @@
           </form>
         </div>
         <div class="notice" id="operationMessage">等待操作。</div>
-        <button class="secondary reset" id="resetData">恢复初始数据</button>
+        <div class="admin-actions">
+          <button class="secondary reset" id="resetData">恢复初始数据</button>
+          <button class="secondary reset" id="exportData">导出数据</button>
+        </div>
       </section>
 
-      <section class="section notes">
-        <div>
-          <p class="eyebrow">Security</p>
-          <h2>安全性说明</h2>
-          <p>普通用户只开放查询权限，不开放删除、修改等写权限；后台操作由管理员账号执行，并通过登录鉴权、角色权限和参数化访问防止越权。</p>
+      <section class="section" id="trend">
+        <div class="section-title center-title">
+          <p class="eyebrow">Data Trend</p>
+          <h2>数据变化趋势</h2>
+          <p>每次增删商品或购买操作后，图表自动记录并展示数据变化曲线。</p>
         </div>
-        <div>
-          <p class="eyebrow">Concurrency & Recovery</p>
-          <h2>并发与恢复说明</h2>
-          <p>两个用户同时购买同一商品可能产生重复订单。解决方式是在事务中锁定商品记录，并为订单中的商品编号设置唯一约束；系统崩溃后可通过事务日志和备份恢复订单数据。</p>
+        <div class="chart-card">
+          <div class="chart-legend" id="chartLegend"></div>
+          <div class="chart-area" id="chartArea">
+            <svg id="trendSvg" viewBox="0 0 700 320" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+          <div class="chart-history" id="chartHistory"></div>
         </div>
       </section>
+
     </main>
 
     <footer>
-      <p>校园二手交易平台数据库系统 | GitHub + Vercel 静态部署</p>
+      <p>校园二手交易平台 </p>
     </footer>
 
     <script src="./app.js"></script>
